@@ -3,9 +3,10 @@
 const RowOf = {
   empty: Symbol(),
   filePath: Symbol('^((\\+\\+\\+)|---) (a|b)[^ ]+?$'),
+  newFilePath: Symbol('^--- \\/dev\\/null$'),
   header: Symbol('^diff --git a\\/([^ ]+?) b\\/([^ ]+?)$'),
   newFile: Symbol('^new file mode \\d+$'),
-  hash: Symbol('^index ([0-9a-z]{7,8})\\.\\.([0-9a-z]{7,8}) \\d{6}$'),
+  hash: Symbol('^index ([0-9a-z]{7,8})\\.\\.([0-9a-z]{7,8})( \\d{6})?$'),
   modify: Symbol('^@@ -(\\d+?,\\d+?) \\+(\\d+?,\\d+?) @@(.*?)$'),
   sentence: Symbol(),
 }
@@ -48,14 +49,16 @@ class DiffParser {
       switch (this.determineRowType(row)) {
         case RowOf.empty:
         case RowOf.filePath:
+        case RowOf.newFilePath:
+          return
+        case RowOf.newFile:
+          diff.isNewFile = true
           return
         case RowOf.header:
           if (diff) diffs.push(diff)
           diff = new DiffFile()
           diff.filePath = this.pickFilePathInHeader(row)
           return
-        case RowOf.newFile:
-          return diff.createBlock()
         case RowOf.hash:
           const hashes = this.parseHash(row)
           diff.prevHash = hashes.prevHash
@@ -73,21 +76,20 @@ class DiffParser {
 
   parseHash(row) {
     const matches = row.match(this.getDescription('hash'))
-    if (!matches) throw Error("this is not hash row")
+    if (!matches) throw Error('this is not hash row')
     return {prevHash: matches[1], currHash: matches[2]}
   }
 
   parseRow(row) {
     const matches = row.match(this.getDescription('modify'))
-    if (!matches) throw Error("this is not row row")
+    if (!matches) throw Error('this is not row row')
     return {prevRow: matches[1], currRow: matches[2], rowInfo: matches[3]}
   }
 
   pickFilePathInHeader(header) {
-    // TODO: 新規ファイルに対応していない
     const matches = header.match(this.getDescription('header'))
-    if (!matches) throw Error("this is not header row")
-    if (matches[1] !== matches[2]) throw Error("header file name is not match")
+    if (!matches) throw Error('this is not header row')
+    if (matches[1] !== matches[2]) throw Error('header file name is not match')
     return matches[1]
   }
 }
@@ -95,15 +97,24 @@ class DiffParser {
 
 class DiffFile {
   constructor() {
-    this._filePath = ""
-    this._prevHash = ""
-    this._currHash = ""
+    this._fileExtension = ''
+    this._filePath = ''
+    this._prevHash = ''
+    this._currHash = ''
     this._blocks = []
     this._currentBlock
+    this._isNewFile = false
+  }
+
+  set isNewFile(bool) {
+    this._isNewFile = bool
   }
 
   set filePath(filePath) {
     this._filePath = filePath
+    this._fileExtension = filePath.includes('.')
+      ? filePath.split('.').slice(-1)[0]
+      : ''
   }
 
   set prevHash(hash) {
@@ -124,20 +135,28 @@ class DiffFile {
   }
 
   render() {
-    return (
-      `## ${this._filePath}\n\n` +
-      `### hash\n\n- \`-${this._prevHash}\`\n- \`+${this._currHash}\`\n\n` +
-      this._blocks.map(block => block.render()).join("")
-    )
+    if (this._isNewFile) {
+      return (
+        `## ${this._filePath}\n\n` +
+        `### hash\n\n \`+${this._currHash}\`\n\n` +
+        this._blocks.map(block => block.renderForNewFile(this._fileExtension)).join('')
+      )
+    } else {
+      return (
+        `## ${this._filePath}\n\n` +
+        `### hash\n\n- \`-${this._prevHash}\`\n- \`+${this._currHash}\`\n\n` +
+        this._blocks.map(block => block.render()).join('')
+      )
+    }
   }
 }
 
 class DiffBlock {
   constructor(param) {
-    this._sentence = ""
-    this._prevRow = (param && param.prevRow) || ""
-    this._currRow = (param && param.currRow) || ""
-    this._rowInfo = (param && param.rowInfo) || ""
+    this._sentence = ''
+    this._prevRow = (param && param.prevRow) || ''
+    this._currRow = (param && param.currRow) || ''
+    this._rowInfo = (param && param.rowInfo) || ''
   }
 
   get sentence() {
@@ -155,9 +174,17 @@ class DiffBlock {
     }
     return info + '```diff\n' + this._sentence + '\n```\n\n'
   }
+
+  renderForNewFile(extension) {
+    const sentence = this._sentence.replace(/^\+/, '').replace(/(\n)\+/g, '$1')
+    return '```' + extension + '\n' + sentence + '\n```\n\n'
+  }
 }
 
-(() => require('fs').readFile(process.argv[2] || process.stdin.fd, process.argv[3] || "utf8", (error, file) => {
-  if (error) throw error
+(() => require('fs').readFile(process.argv[2] || process.stdin.fd, process.argv[3] || 'utf8', (error, file) => {
+  if (error) throw Error(error)
+  if (file.length > 60000 && !process.argv[2]) {
+    throw Error('60000文字以上はパイプでは、動きません。ファイル読み込みにしてください')
+  }
   console.log(new DiffParser().parse(file))
 }))()
