@@ -1,5 +1,3 @@
-// TODO 新ファイルのときは、コードをdiffではなく、拡張子にしたほうがよい？
-
 const RowOf = {
   empty: Symbol(),
   filePath: Symbol('^((\\+\\+\\+)|---) (a|b)[^ ]+?$'),
@@ -39,8 +37,6 @@ class DiffParser {
     }
     return RowOf.sentence
   }
-
-
 
   classify(rows) {
     const diffs = []
@@ -93,7 +89,6 @@ class DiffParser {
     return matches[1]
   }
 }
-
 
 class DiffFile {
   constructor() {
@@ -184,7 +179,7 @@ class DiffBlock {
 (() => require('fs').readFile(process.argv[2] || process.stdin.fd, process.argv[3] || 'utf8', (error, file) => {
   if (error) throw Error(error)
   if (file.length > 60000 && !process.argv[2]) {
-    throw Error('60000文字以上はパイプでは、動きません。ファイル読み込みにしてください')
+    throw Error('60000文字以上はパイプでは動きません。ファイル読み込みにしてください')
   }
   console.log(new DiffParser().parse(file))
 }))()
