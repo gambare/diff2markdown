@@ -93,7 +93,7 @@ class DiffParser {
   pickFilePathInHeader(header) {
     const matches = header.match(this.getDescription('header'))
     if (!matches) throw Error('this is not header row')
-    return matches[1] !== matches[2]
+    return matches[1] === matches[2]
       ? matches[1]
       : matches[1] + " and " + matches[2]
   }
