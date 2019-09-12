@@ -1,12 +1,16 @@
 const RowOf = {
   empty: Symbol(),
   filePath: Symbol('^((\\+\\+\\+)|---) (a|b)[^ ]+?$'),
+  deletedPath: Symbol('^\\+\\+\\+ /dev/null$'),
   newFilePath: Symbol('^--- \\/dev\\/null$'),
   header: Symbol('^diff --git a\\/([^ ]+?) b\\/([^ ]+?)$'),
   newFile: Symbol('^new file mode \\d+$'),
   hash: Symbol('^index ([0-9a-z]{7,8})\\.\\.([0-9a-z]{7,8})( \\d{6})?$'),
-  modify: Symbol('^@@ -(\\d+?,\\d+?) \\+(\\d+?,\\d+?) @@(.*?)$'),
+  modify: Symbol('^@@ -(\\d+?,\\d+?) \\+(\\d+?,\\d+?) @@ ?(.*?)$'),
   sentence: Symbol(),
+  similarity: Symbol('similarity index \\d+%$'),
+  rename: Symbol('^rename (from|to) .+$'),
+  deletedFile: Symbol('^deleted file mode \\d+$'),
 }
 
 class DiffParser {
@@ -46,6 +50,10 @@ class DiffParser {
         case RowOf.empty:
         case RowOf.filePath:
         case RowOf.newFilePath:
+        case RowOf.similarity:
+        case RowOf.rename:
+        case RowOf.deletedFile:
+        case RowOf.deletedPath:
           return
         case RowOf.newFile:
           diff.isNewFile = true
@@ -85,8 +93,9 @@ class DiffParser {
   pickFilePathInHeader(header) {
     const matches = header.match(this.getDescription('header'))
     if (!matches) throw Error('this is not header row')
-    if (matches[1] !== matches[2]) throw Error('header file name is not match')
-    return matches[1]
+    return matches[1] !== matches[2]
+      ? matches[1]
+      : matches[1] + " and " + matches[2]
   }
 }
 
@@ -126,7 +135,13 @@ class DiffFile {
   }
 
   addSentence(row) {
-    this._currentBlock.addSentence(row)
+    if (this._currentBlock) {
+      this._currentBlock.addSentence(row)
+    } else {
+      console.log(row)
+      throw Error("block is not defined");
+    }
+
   }
 
   render() {
